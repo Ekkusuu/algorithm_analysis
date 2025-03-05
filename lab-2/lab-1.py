@@ -24,7 +24,7 @@ class SortingVisualizer:
         
         # Algorithm selection
         tk.Label(control_frame, text="Algorithm:").pack(side=tk.LEFT, padx=5)
-        alg_options = ["Quick Sort", "Merge Sort", "Heap Sort", "Patience Sort"]
+        alg_options = ["Quick Sort", "Merge Sort", "Heap Sort", "Patience Sort", "Special Sort"]
         self.algorithm_menu = tk.OptionMenu(control_frame, self.algorithm, *alg_options)
         self.algorithm_menu.pack(side=tk.LEFT, padx=5)
         
@@ -140,6 +140,8 @@ class SortingVisualizer:
             self.sorting_generator = heap_sort(self.array)
         elif algo == "Patience Sort":
             self.sorting_generator = patience_sort(self.array)
+        elif algo == "Special Sort":
+            self.sorting_generator = special_sort(self.array)
         
         self.animate()
     
@@ -167,10 +169,6 @@ class SortingVisualizer:
         else:
             return 300  # Slow speed (300 ms)
     
-
-
-    import gc  # Import garbage collector
-
     def plot_time_complexity(self):
         """ Analyze and plot the time complexity of the selected sorting algorithm with improved visual differentiation """
         algo = self.algorithm.get()
@@ -179,11 +177,12 @@ class SortingVisualizer:
         
         sizes = list(range(10, 1001, 10))  # Testing with array sizes from 10 to 1000
         times = []  # Stores times for the selected algorithm
-        all_algorithms_times = {  # Dictionary to store times for all algorithms
+        all_algorithms_times = {
             "Quick Sort": [],
             "Merge Sort": [],
             "Heap Sort": [],
-            "Patience Sort": []
+            "Patience Sort": [],
+            "Special Sort": []  # Added Special Sort
         }
 
         for size in sizes:
@@ -210,6 +209,8 @@ class SortingVisualizer:
                     list(heap_sort(array))
                 elif algo == "Patience Sort":
                     list(patience_sort(array))
+                elif algo == "Special Sort":
+                    list(special_sort(array))
 
                 end_time = time.perf_counter()
                 gc.enable()  # Re-enable garbage collection
@@ -243,6 +244,8 @@ class SortingVisualizer:
                     list(heap_sort(array))
                 elif algo_name == "Patience Sort":
                     list(patience_sort(array))
+                elif algo_name == "Special Sort":
+                    list(special_sort(array))
 
                 end_time = time.perf_counter()
                 gc.enable()  # Re-enable garbage collection
@@ -251,17 +254,21 @@ class SortingVisualizer:
                 all_algorithms_times[algo_name].append(round(elapsed_time, 8))
 
         # Determine the max time recorded (for scaling Y-axis dynamically)
-        max_time = max(max(all_algorithms_times["Quick Sort"]),
-                    max(all_algorithms_times["Merge Sort"]),
-                    max(all_algorithms_times["Heap Sort"]),
-                    max(all_algorithms_times["Patience Sort"])) * 1.1  # Add 10% margin
+        max_time = max(
+            max(all_algorithms_times["Quick Sort"]),
+            max(all_algorithms_times["Merge Sort"]),
+            max(all_algorithms_times["Heap Sort"]),
+            max(all_algorithms_times["Patience Sort"]),
+            max(all_algorithms_times["Special Sort"])  # Fixed: Now includes Special Sort
+        ) * 1.1  # Add 10% margin
 
         # Color coding for different algorithms
         colors = {
             "Quick Sort": "blue",
             "Merge Sort": "green",
             "Heap Sort": "red",
-            "Patience Sort": "purple"
+            "Patience Sort": "purple",
+            "Special Sort": "orange"  # Added color for Special Sort
         }
 
         # Plot the graph for the selected algorithm
@@ -298,6 +305,52 @@ def quick_sort(arr, low, high):
         yield from quick_sort(arr, low, pivot_index-1)
         yield from quick_sort(arr, pivot_index+1, high)
     return
+
+def insertion_sort(arr):
+    n = len(arr)
+    for i in range(1, n):
+        key = arr[i]
+        j = i - 1
+
+        # Move elements of arr[0..i-1], that are greater than key, to one position ahead
+        while j >= 0 and arr[j] > key:
+            arr[j + 1] = arr[j]
+            j -= 1
+            yield arr, [j + 1, i]  # Yield the current array state and the swapped indices
+        
+        arr[j + 1] = key
+        yield arr, [j + 1]  # Yield final placement of the current element
+        
+    return
+
+
+def is_mostly_sorted(arr):
+    """ Checks if the array is at least 70% sorted """
+    count_sorted = sum(1 for i in range(len(arr) - 1) if arr[i] <= arr[i + 1])
+    return count_sorted / len(arr) >= 0.7
+
+def special_sort(arr):
+    """ Dynamically selects the best sorting algorithm """
+    n = len(arr)
+
+    # Step 1: Small Arrays → Use Insertion Sort
+    if n <= 30:
+        yield from insertion_sort(arr)
+        return
+    
+    # Step 2: Check if the array is mostly sorted → Use Insertion Sort
+    if is_mostly_sorted(arr):
+        yield from insertion_sort(arr)
+        return
+
+    # Step 3: Medium-sized Arrays → Use Quick Sort
+    if 30 < n <= 100:
+        yield from quick_sort(arr, 0, n - 1)
+        return
+
+    # Step 4: Large or Highly Unsorted Arrays → Use Merge Sort
+    yield from merge_sort(arr, 0, n)
+
 
 def partition(arr, low, high):
     pivot = arr[high]

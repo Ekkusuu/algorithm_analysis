@@ -353,7 +353,19 @@ def special_sort(arr):
 
 
 def partition(arr, low, high):
-    pivot = arr[high]
+    # Choose pivot using the median-of-three strategy
+    mid = (low + high) // 2
+    pivot_candidates = [(arr[low], low), (arr[mid], mid), (arr[high], high)]
+    
+    # Sort the candidates by value and pick the median
+    pivot_candidates.sort(key=lambda x: x[0])
+    pivot_value, pivot_index = pivot_candidates[1]
+    
+    # Swap the pivot with the last element to maintain partition logic
+    arr[pivot_index], arr[high] = arr[high], arr[pivot_index]
+    
+    # Start partitioning
+    pivot = arr[high]  # Now, pivot is at the high index
     i = low - 1
     for j in range(low, high):
         if arr[j] < pivot:
@@ -361,9 +373,11 @@ def partition(arr, low, high):
             arr[i], arr[j] = arr[j], arr[i]
             # Yield the array state after each swap (highlight the swapped indices)
             yield arr, (i, j)
-    arr[i+1], arr[high] = arr[high], arr[i+1]
-    yield arr, (i+1, high)
-    return i+1
+    
+    arr[i+1], arr[high] = arr[high], arr[i+1]  # Move pivot to correct position
+    yield arr, (i+1, high)  # Return the final partition index
+    return i + 1
+
 
 def merge_sort(arr, left, right):
     if right - left > 1:

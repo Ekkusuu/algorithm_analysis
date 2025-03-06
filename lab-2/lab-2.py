@@ -276,7 +276,7 @@ class SortingVisualizer:
         plt.plot(sizes, times, marker='o', linestyle='-', color=colors.get(algo, "black"), label=f'{algo} Time Complexity')
         plt.xlabel('Array Size')
         plt.ylabel('Time (seconds)')
-        plt.title(f'{algo} Time Complexity Analysis (Visually Distinct)')
+        plt.title(f'{algo} Time Complexity Analysis')
         plt.ylim(0, max_time)  # Set dynamic Y-limit based on max time
         plt.grid(True)
         plt.legend()

@@ -5,6 +5,8 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 import gc
+import bisect
+import heapq
 
 class SortingVisualizer:
     def __init__(self, master):
@@ -133,15 +135,15 @@ class SortingVisualizer:
         # Create a sorting generator based on the selected algorithm
         algo = self.algorithm.get()
         if algo == "Quick Sort":
-            self.sorting_generator = quick_sort(self.array, 0, len(self.array)-1)
+            self.sorting_generator = quick_sort_visual(self.array, 0, len(self.array)-1)
         elif algo == "Merge Sort":
-            self.sorting_generator = merge_sort(self.array, 0, len(self.array))
+            self.sorting_generator = merge_sort_visual(self.array, 0, len(self.array))
         elif algo == "Heap Sort":
             self.sorting_generator = heap_sort(self.array)
         elif algo == "Patience Sort":
-            self.sorting_generator = patience_sort(self.array)
+            self.sorting_generator = patience_sort_visual(self.array)
         elif algo == "Special Sort":
-            self.sorting_generator = special_sort(self.array)
+            self.sorting_generator = special_sort_visual(self.array)
         
         self.animate()
     
@@ -175,7 +177,7 @@ class SortingVisualizer:
         include_negatives = self.include_negatives.get()
         include_floats = self.include_floats.get()
         
-        sizes = list(range(10, 1001, 10))  # Testing with array sizes from 10 to 1000
+        sizes = list(range(10, 5001, 50))  # Testing with array sizes from 10 to 1000
         times = []  # Stores times for the selected algorithm
         all_algorithms_times = {
             "Quick Sort": [],
@@ -299,60 +301,14 @@ class SortingVisualizer:
 
 # ---------------- Sorting Algorithms as Generators ----------------
 
-def quick_sort(arr, low, high):
+def quick_sort_visual(arr, low, high):
     if low < high:
-        pivot_index = yield from partition(arr, low, high)
-        yield from quick_sort(arr, low, pivot_index-1)
-        yield from quick_sort(arr, pivot_index+1, high)
+        pivot_index = yield from partition_visual(arr, low, high)
+        yield from quick_sort_visual(arr, low, pivot_index-1)
+        yield from quick_sort_visual(arr, pivot_index+1, high)
     return
 
-def insertion_sort(arr):
-    n = len(arr)
-    for i in range(1, n):
-        key = arr[i]
-        j = i - 1
-
-        # Move elements of arr[0..i-1], that are greater than key, to one position ahead
-        while j >= 0 and arr[j] > key:
-            arr[j + 1] = arr[j]
-            j -= 1
-            yield arr, [j + 1, i]  # Yield the current array state and the swapped indices
-        
-        arr[j + 1] = key
-        yield arr, [j + 1]  # Yield final placement of the current element
-        
-    return
-
-
-def is_mostly_sorted(arr):
-    """ Checks if the array is at least 70% sorted """
-    count_sorted = sum(1 for i in range(len(arr) - 1) if arr[i] <= arr[i + 1])
-    return count_sorted / len(arr) >= 0.7
-
-def special_sort(arr):
-    """ Dynamically selects the best sorting algorithm """
-    n = len(arr)
-
-    # Step 1: Small Arrays → Use Insertion Sort
-    if n <= 30:
-        yield from insertion_sort(arr)
-        return
-    
-    # Step 2: Check if the array is mostly sorted → Use Insertion Sort
-    if is_mostly_sorted(arr):
-        yield from insertion_sort(arr)
-        return
-
-    # Step 3: Medium-sized Arrays → Use Quick Sort
-    if 30 < n <= 100:
-        yield from quick_sort(arr, 0, n - 1)
-        return
-
-    # Step 4: Large or Highly Unsorted Arrays → Use Merge Sort
-    yield from merge_sort(arr, 0, n)
-
-
-def partition(arr, low, high):
+def partition_visual(arr, low, high):
     # Choose pivot using the median-of-three strategy
     mid = (low + high) // 2
     pivot_candidates = [(arr[low], low), (arr[mid], mid), (arr[high], high)]
@@ -378,16 +334,122 @@ def partition(arr, low, high):
     yield arr, (i+1, high)  # Return the final partition index
     return i + 1
 
+def quick_sort(arr, low, high):
+    if low < high:
+        pivot_index = yield from partition(arr, low, high)
+        yield from quick_sort(arr, low, pivot_index-1)
+        yield from quick_sort(arr, pivot_index+1, high)
+    return
 
-def merge_sort(arr, left, right):
+def partition(arr, low, high):
+    # Choose pivot using the median-of-three strategy
+    mid = (low + high) // 2
+    pivot_candidates = [(arr[low], low), (arr[mid], mid), (arr[high], high)]
+    
+    # Sort the candidates by value and pick the median
+    pivot_candidates.sort(key=lambda x: x[0])
+    pivot_value, pivot_index = pivot_candidates[1]
+    
+    # Swap the pivot with the last element to maintain partition logic
+    arr[pivot_index], arr[high] = arr[high], arr[pivot_index]
+    
+    # Start partitioning
+    pivot = arr[high]  # Now, pivot is at the high index
+    i = low - 1
+    for j in range(low, high):
+        if arr[j] < pivot:
+            i += 1
+            arr[i], arr[j] = arr[j], arr[i]
+    
+    arr[i+1], arr[high] = arr[high], arr[i+1]  # Move pivot to correct position
+    yield arr, (i+1, high)  # Return the final partition index
+    return i + 1
+
+def insertion_sort(arr):
+    n = len(arr)
+    for i in range(1, n):
+        key = arr[i]
+        j = i - 1
+
+        # Move elements of arr[0..i-1], that are greater than key, to one position ahead
+        while j >= 0 and arr[j] > key:
+            arr[j + 1] = arr[j]
+            j -= 1
+            yield arr, [j + 1, i]  # Yield the current array state and the swapped indices
+        
+        arr[j + 1] = key
+        yield arr, [j + 1]  # Yield final placement of the current element
+        
+    return
+
+
+
+def special_sort_visual(arr):
+    """ Dynamically selects the best sorting algorithm """
+    n = len(arr)
+
+    # Step 1: Small Arrays → Use Insertion Sort
+    if n <= 30:
+        yield from insertion_sort(arr)
+        return
+
+    # Step 3: Medium-sized Arrays → Use Quick Sort
+    if 30 < n <= 100:
+        yield from quick_sort_visual(arr, 0, n - 1)
+        return
+
+    # Step 4: Large or Highly Unsorted Arrays → Use Merge Sort
+    yield from merge_sort_visual(arr, 0, n)
+
+def special_sort(arr):
+    """ Dynamically selects the best sorting algorithm """
+    n = len(arr)
+
+    # Step 1: Small Arrays → Use Insertion Sort
+    if n <= 30:
+        yield from insertion_sort(arr)
+        return
+
+    # Step 3: Medium-sized Arrays → Use Quick Sort
+    if 30 < n <= 100:
+        yield from quick_sort(arr, 0, n - 1)
+        return
+
+    # Step 4: Large or Highly Unsorted Arrays → Use Merge Sort
+    yield from merge_sort(arr, 0, n)
+
+
+
+
+def insertion_sort_range(arr, left, right):
+    """Insertion Sort that works within a specified range of the array."""
+    for i in range(left + 1, right):
+        key = arr[i]
+        j = i - 1
+
+        while j >= left and arr[j] > key:
+            arr[j + 1] = arr[j]
+            j -= 1
+
+        arr[j + 1] = key
+        yield arr
+
+
+def merge_sort_visual(arr, left, right, threshold=10):
+    """Merge Sort optimized with Insertion Sort for small subarrays."""
+    if right - left <= threshold:
+        yield from insertion_sort_range(arr, left, right)
+        return
+
     if right - left > 1:
         mid = (left + right) // 2
-        yield from merge_sort(arr, left, mid)
-        yield from merge_sort(arr, mid, right)
-        
+        yield from merge_sort_visual(arr, left, mid, threshold)
+        yield from merge_sort_visual(arr, mid, right, threshold)
+
+        # Merge step
         merged = []
         i, j = left, mid
-        # Merge the two sorted halves
+
         while i < mid and j < right:
             if arr[i] < arr[j]:
                 merged.append(arr[i])
@@ -395,46 +457,100 @@ def merge_sort(arr, left, right):
             else:
                 merged.append(arr[j])
                 j += 1
+
         while i < mid:
             merged.append(arr[i])
             i += 1
         while j < right:
             merged.append(arr[j])
             j += 1
-        
-        # Update the original array and yield the state after each element is placed
+
+        # Update original array and yield state changes
         for index, val in enumerate(merged):
             arr[left + index] = val
-            yield arr, (left + index,)
+            yield arr, [left + index]
+
+
     return
+
+def merge_sort(arr, left, right, threshold=10):
+    """Merge Sort optimized with Insertion Sort for small subarrays."""
+    if right - left <= threshold:
+        yield from insertion_sort_range(arr, left, right)
+        return
+
+    if right - left > 1:
+        mid = (left + right) // 2
+        yield from merge_sort(arr, left, mid, threshold)
+        yield from merge_sort(arr, mid, right, threshold)
+
+        # Merge step
+        merged = []
+        i, j = left, mid
+
+        while i < mid and j < right:
+            if arr[i] < arr[j]:
+                merged.append(arr[i])
+                i += 1
+            else:
+                merged.append(arr[j])
+                j += 1
+
+        while i < mid:
+            merged.append(arr[i])
+            i += 1
+        while j < right:
+            merged.append(arr[j])
+            j += 1
+
+        # Update original array and yield state changes
+        for index, val in enumerate(merged):
+            arr[left + index] = val
+            yield arr, [left + index]
+
+
+    return
+
+
 
 def heap_sort(arr):
     n = len(arr)
-    # Build a max heap
+
+    # Build a max heap using an iterative heapify approach
     for i in range(n // 2 - 1, -1, -1):
         yield from heapify(arr, n, i)
+
     # Extract elements one by one
-    for i in range(n-1, 0, -1):
-        arr[0], arr[i] = arr[i], arr[0]
-        yield arr, (0, i)
+    for i in range(n - 1, 0, -1):
+        if arr[0] != arr[i]:  # Avoid redundant swaps
+            arr[0], arr[i] = arr[i], arr[0]
+            yield arr, (0, i)
+
         yield from heapify(arr, i, 0)
-    return
+
 
 def heapify(arr, n, i):
-    largest = i
-    left = 2*i + 1
-    right = 2*i + 2
-    if left < n and arr[left] > arr[largest]:
-        largest = left
-    if right < n and arr[right] > arr[largest]:
-        largest = right
-    if largest != i:
+    """Iterative heapify function to avoid deep recursion."""
+    while True:
+        largest = i
+        left = 2 * i + 1
+        right = 2 * i + 2
+
+        if left < n and arr[left] > arr[largest]:
+            largest = left
+        if right < n and arr[right] > arr[largest]:
+            largest = right
+
+        if largest == i:  # If no swap is needed, break
+            break
+
         arr[i], arr[largest] = arr[largest], arr[i]
         yield arr, (i, largest)
-        yield from heapify(arr, n, largest)
-    return
+        i = largest  # Move down the tree to continue heapifying
 
-def patience_sort(arr):
+
+
+def patience_sort_visual(arr):
     piles = []
     
     for num in arr:
@@ -467,6 +583,42 @@ def patience_sort(arr):
     # Final state
     arr[:] = sorted_arr
     return
+
+
+
+
+
+def patience_sort(arr):
+    piles = []
+
+    # Construct the piles using binary search
+    for num in arr:
+        idx = bisect.bisect_right([pile[-1] for pile in piles], num)
+        if idx < len(piles):
+            piles[idx].append(num)
+        else:
+            piles.append([num])
+
+        yield arr, [arr.index(num)]  # Highlight inserted element
+
+    # Merge phase using a min-heap
+    heap = [(pile.pop(), i) for i, pile in enumerate(piles)]
+    heapq.heapify(heap)
+    sorted_index = 0
+
+    while heap:
+        smallest, pile_idx = heapq.heappop(heap)
+        arr[sorted_index] = smallest
+        sorted_index += 1
+
+        # If there are remaining elements in the pile, push next element to heap
+        if piles[pile_idx]:
+            heapq.heappush(heap, (piles[pile_idx].pop(), pile_idx))
+
+    return
+
+
+
 
 # ---------------- Main Program ----------------
 

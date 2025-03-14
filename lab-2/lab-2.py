@@ -375,7 +375,6 @@ def insertion_sort(arr):
         while j >= 0 and arr[j] > key:
             arr[j + 1] = arr[j]
             j -= 1
-            yield arr, [j + 1, i]  # Yield the current array state and the swapped indices
         
         arr[j + 1] = key
         yield arr, [j + 1]  # Yield final placement of the current element
@@ -434,11 +433,25 @@ def insertion_sort_range(arr, left, right):
         arr[j + 1] = key
         yield arr
 
+def insertion_sort_range_visual(arr, left, right):
+    """Insertion Sort that works within a specified range of the array."""
+    for i in range(left + 1, right):
+        key = arr[i]
+        j = i - 1
+
+        while j >= left and arr[j] > key:
+            arr[j + 1] = arr[j]
+            j -= 1
+            yield arr, [j + 1, i]  # Highlight swap
+
+        arr[j + 1] = key
+        yield arr, [j + 1]  # Highlight final position
+
 
 def merge_sort_visual(arr, left, right, threshold=10):
     """Merge Sort optimized with Insertion Sort for small subarrays."""
     if right - left <= threshold:
-        yield from insertion_sort_range(arr, left, right)
+        yield from insertion_sort_range_visual(arr, left, right)
         return
 
     if right - left > 1:

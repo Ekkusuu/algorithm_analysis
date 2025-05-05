@@ -190,7 +190,7 @@ class SortingVisualizer:
         for size in sizes:
             run_times = []  # Store multiple run times for this array size
 
-            for _ in range(5):  # Run each size 5 times to smooth out anomalies
+            for _ in range(10):  # Run each size 5 times to smooth out anomalies
                 # Generate a random array with chosen settings
                 if include_floats:
                     array = [round(random.uniform(-100, 100), 2) if include_negatives 

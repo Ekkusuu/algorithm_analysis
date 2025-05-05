@@ -177,7 +177,7 @@ class SortingVisualizer:
         include_negatives = self.include_negatives.get()
         include_floats = self.include_floats.get()
         
-        sizes = list(range(10, 5001, 50))  # Testing with array sizes from 10 to 1000
+        sizes = list(range(10, 20001, 300))  # Testing with array sizes from 10 to 1000
         times = []  # Stores times for the selected algorithm
         all_algorithms_times = {
             "Quick Sort": [],
@@ -410,7 +410,7 @@ def special_sort(arr):
         return
 
     # Step 3: Medium-sized Arrays → Use Quick Sort
-    if 30 < n <= 100:
+    if 30 < n <= 10000:
         yield from quick_sort(arr, 0, n - 1)
         return
 

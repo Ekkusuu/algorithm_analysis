@@ -170,7 +170,7 @@ class GraphExplorerUI(tk.Tk):
             return nx.barabasi_albert_graph(n, m)
         if t == "SmallWorld":
             self.grid_pos = None
-            k = max(2, (n//10) | 1)  # ensure at least 2 and even
+            k = max(2, (n//10) | 1)
             p = 0.1
             return nx.watts_strogatz_graph(n, k, p)
         self.grid_pos = None
@@ -192,10 +192,7 @@ class GraphExplorerUI(tk.Tk):
 
     def _draw_graph(self, highlight_nodes=None, highlight_edges=None):
         self.ax.clear()
-        if self.grid_pos:
-            pos = self.grid_pos
-        else:
-            pos = nx.spring_layout(self.G, seed=42)
+        pos = self.grid_pos if self.grid_pos else nx.spring_layout(self.G, seed=42)
         nx.draw(self.G, pos, ax=self.ax,
                 with_labels=True, node_size=300, node_color='lightblue',
                 edge_color='gray', arrows=self.is_directed.get())
@@ -221,10 +218,11 @@ class GraphExplorerUI(tk.Tk):
         if self.is_weighted.get():
             self._assign_weights(self.G)
         self._draw_graph()
-        self.info.config(text=f"Graph generated.")
+        self.info.config(text=f"Graph generated with {n} nodes.")
 
     def _on_plot_bfs_dfs(self):
-        self.figure.clear(); self.ax = self.figure.add_subplot(111)
+        self.figure.clear()
+        self.ax = self.figure.add_subplot(111)
         self._stop_animation()
 
         max_n = self.node_scale.get()
@@ -243,10 +241,12 @@ class GraphExplorerUI(tk.Tk):
         self.ax.plot(sizes, dfs_t, label='DFS', marker='.', linewidth=1)
         self.ax.set_xlabel('Number of Nodes'); self.ax.set_ylabel('Average Time (s)')
         self.ax.set_title(f'BFS vs DFS (up to {max_n} nodes, avg over 10 runs)')
-        self.ax.legend(); self.canvas.draw()
+        self.ax.legend()
+        self.canvas.draw()
 
     def _on_plot_sp(self):
-        self.figure.clear(); self.ax = self.figure.add_subplot(111)
+        self.figure.clear()
+        self.ax = self.figure.add_subplot(111)
         self._stop_animation()
         self.fw_done = False
 
@@ -257,13 +257,20 @@ class GraphExplorerUI(tk.Tk):
         for n in sizes:
             sd, fd = 0.0, 0.0
             for _ in range(10):
-                s, e = min(s_ui, n-1), min(e_ui, n-1)
-                G0 = self._build_undirected(n)
-                G = (self.is_directed.get() and self._orient(G0)) or G0
+                # ensure directed graph has a path
+                while True:
+                    G0 = self._build_undirected(n)
+                    G = (self.is_directed.get() and self._orient(G0)) or G0
+                    if not self.is_directed.get():
+                        break
+                    s, e = min(s_ui, n-1), min(e_ui, n-1)
+                    if nx.has_path(G, s, e):
+                        break
                 if self.is_weighted.get():
                     self._assign_weights(G)
                 else:
-                    for u,v in G.edges(): G[u][v]['weight'] = 1
+                    for u,v in G.edges():
+                        G[u][v]['weight'] = 1
                 t0 = time.perf_counter(); nx.dijkstra_path(G, s, e, weight='weight'); sd += time.perf_counter() - t0
                 t0 = time.perf_counter(); nx.floyd_warshall(G, weight='weight'); fd += time.perf_counter() - t0
             dij_t.append(sd/10); fw_t.append(fd/10)
@@ -272,10 +279,12 @@ class GraphExplorerUI(tk.Tk):
         self.ax.plot(sizes, fw_t, label='Floyd–Warshall', marker='.', linewidth=1)
         self.ax.set_xlabel('Number of Nodes'); self.ax.set_ylabel('Average Time (s)')
         self.ax.set_title(f'Dijkstra vs Floyd–Warshall (up to {max_n} nodes, avg over 10 runs)')
-        self.ax.legend(); self.canvas.draw()
+        self.ax.legend()
+        self.canvas.draw()
 
     def _on_plot_mst(self):
-        self.figure.clear(); self.ax = self.figure.add_subplot(111)
+        self.figure.clear()
+        self.ax = self.figure.add_subplot(111)
         self._stop_animation()
 
         max_n = self.node_scale.get()
@@ -288,7 +297,8 @@ class GraphExplorerUI(tk.Tk):
                 if self.is_weighted.get():
                     self._assign_weights(G0)
                 else:
-                    for u,v in G0.edges(): G0[u][v]['weight'] = 1
+                    for u,v in G0.edges():
+                        G0[u][v]['weight'] = 1
                 t0 = time.perf_counter(); nx.minimum_spanning_tree(G0, algorithm='prim', weight='weight'); pt += time.perf_counter() - t0
                 t0 = time.perf_counter(); nx.minimum_spanning_tree(G0, algorithm='kruskal', weight='weight'); kt += time.perf_counter() - t0
             prim_t.append(pt/10); kruskal_t.append(kt/10)
@@ -297,7 +307,8 @@ class GraphExplorerUI(tk.Tk):
         self.ax.plot(sizes, kruskal_t, label="Kruskal's", marker='.', linewidth=1)
         self.ax.set_xlabel('Number of Nodes'); self.ax.set_ylabel('Average Time (s)')
         self.ax.set_title(f"Prim vs Kruskal (up to {max_n} nodes, avg over 10 runs)")
-        self.ax.legend(); self.canvas.draw()
+        self.ax.legend()
+        self.canvas.draw()
 
     # ─── Recording steps for animation ────────────────────────────────────
     def _record_bfs(self, s, t):
@@ -384,7 +395,8 @@ class GraphExplorerUI(tk.Tk):
         self.current_path, self.current_edges = [], mst
 
     def _record_floyd_warshall(self):
-        dist = {i: {j: (self.G[i][j]['weight'] if self.G.has_edge(i, j) else float('inf')) for j in self.G} for i in self.G}
+        dist = {i: {j: (self.G[i][j]['weight'] if self.G.has_edge(i, j) else float('inf'))
+                    for j in self.G} for i in self.G}
         next_hop = {i: {j: (j if self.G.has_edge(i, j) else None) for j in self.G} for i in self.G}
         for i in self.G:
             dist[i][i] = 0; next_hop[i][i] = i
@@ -438,7 +450,7 @@ class GraphExplorerUI(tk.Tk):
         self.step_index = 0
         self.animating = True
         self.next_step_btn.config(state="normal")
-        self.info.config(text="Animation started.")
+        self.info.config(text="Animation started. Use → or Next Step.")
 
     def _next_step(self):
         if not self.animating:
@@ -491,7 +503,7 @@ class GraphExplorerUI(tk.Tk):
                 path.append(i)
             edges = list(zip(path, path[1:]))
             self._draw_graph(highlight_nodes=path, highlight_edges=edges)
-            self.info.config(text="FW dynamic path:\n" + "→".join(map(str, path)))
+            self.info.config(text="FW dynamic path: " + "→".join(map(str, path)))
 
 if __name__ == "__main__":
     app = GraphExplorerUI()

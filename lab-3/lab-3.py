@@ -15,6 +15,7 @@ except ImportError:
     def random_tree(n):
         if n < 2:
             return nx.Graph()
+        # Prufer sequence method
         seq = [random.randrange(n) for _ in range(n - 2)]
         degree = [1] * n
         for x in seq:
@@ -40,7 +41,7 @@ class GraphExplorerUI(tk.Tk):
         self.geometry("1100x650")
         self.focus_set()
 
-        # Animation & plotting state
+        # ─── State ───────────────────────────────────────────────────────────
         self.steps = []
         self.step_index = 0
         self.current_path = []
@@ -50,15 +51,16 @@ class GraphExplorerUI(tk.Tk):
         self._auto_after_id = None
         self.fw_next = None
         self.fw_done = False
+        self.grid_pos = None  # fixed positions for grid layout
 
-        # ─── Control Panel ────────────────────────────────────────────────────
+        # ─── Control Panel ───────────────────────────────────────────────────
         ctrl = ttk.Frame(self, padding=10)
         ctrl.pack(side=tk.LEFT, fill=tk.Y)
 
         ttk.Label(ctrl, text="Graph type:").pack(anchor="w")
         self.graph_type = tk.StringVar(value="Tree")
-        graph_types = ["Tree", "Sparse", "Dense", "Complete", "Grid"]
-        ttk.OptionMenu(ctrl, self.graph_type, graph_types[0], *graph_types).pack(fill="x", pady=(0,10))
+        types = ["Tree", "Sparse", "Dense", "Complete", "Grid", "ScaleFree", "SmallWorld"]
+        ttk.OptionMenu(ctrl, self.graph_type, types[0], *types).pack(fill="x", pady=(0,10))
 
         self.is_directed = tk.BooleanVar()
         ttk.Checkbutton(ctrl, text="Directed edges", variable=self.is_directed).pack(anchor="w")
@@ -71,14 +73,18 @@ class GraphExplorerUI(tk.Tk):
         self.node_scale.pack(fill="x", pady=(0,10))
 
         ttk.Label(ctrl, text="Start node:").pack(anchor="w")
-        self.start_scale = tk.Scale(ctrl, from_=0, to=self.node_scale.get()-1, orient=tk.HORIZONTAL,
-                                    command=self._on_slider_change)
+        self.start_scale = tk.Scale(
+            ctrl, from_=0, to=self.node_scale.get()-1,
+            orient=tk.HORIZONTAL, command=self._on_slider_change
+        )
         self.start_scale.set(0)
         self.start_scale.pack(fill="x", pady=(0,10))
 
         ttk.Label(ctrl, text="End node:").pack(anchor="w")
-        self.end_scale = tk.Scale(ctrl, from_=0, to=self.node_scale.get()-1, orient=tk.HORIZONTAL,
-                                  command=self._on_slider_change)
+        self.end_scale = tk.Scale(
+            ctrl, from_=0, to=self.node_scale.get()-1,
+            orient=tk.HORIZONTAL, command=self._on_slider_change
+        )
         self.end_scale.set(self.node_scale.get()-1)
         self.end_scale.pack(fill="x", pady=(0,20))
 
@@ -104,7 +110,7 @@ class GraphExplorerUI(tk.Tk):
         self.canvas = FigureCanvasTkAgg(self.figure, master=self)
         self.canvas.get_tk_widget().pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        # Arrow key for fast-stepping
+        # ─── Key Bindings ─────────────────────────────────────────────────────
         self.bind("<KeyPress-Right>", self._on_right_press)
         self.bind("<KeyRelease-Right>", self._on_right_release)
 
@@ -115,8 +121,10 @@ class GraphExplorerUI(tk.Tk):
 
     def _stop_animation(self):
         self.animating = False
-        self.steps.clear(); self.step_index = 0
-        self.current_path.clear(); self.current_edges.clear()
+        self.steps.clear()
+        self.step_index = 0
+        self.current_path.clear()
+        self.current_edges.clear()
         self.next_step_btn.config(state="disabled")
         if self._auto_after_id:
             self.after_cancel(self._auto_after_id)
@@ -136,30 +144,58 @@ class GraphExplorerUI(tk.Tk):
 
     def _build_undirected(self, n):
         t = self.graph_type.get()
-        if t == "Tree":    return random_tree(n)
-        if t == "Sparse":  return nx.gnm_random_graph(n, max(2*n, n-1))
-        if t == "Dense":   return nx.gnm_random_graph(n, int(0.8*(n*(n-1)//2)))
-        if t == "Complete":return nx.complete_graph(n)
+        if t == "Tree":
+            self.grid_pos = None
+            return random_tree(n)
+        if t == "Sparse":
+            self.grid_pos = None
+            return nx.gnm_random_graph(n, max(2*n, n-1))
+        if t == "Dense":
+            self.grid_pos = None
+            return nx.gnm_random_graph(n, int(0.8*(n*(n-1)//2)))
+        if t == "Complete":
+            self.grid_pos = None
+            return nx.complete_graph(n)
         if t == "Grid":
-            r = int(n**0.5) or 1; c = int(np.ceil(n/r))
-            G = nx.grid_2d_graph(r, c)
-            return nx.convert_node_labels_to_integers(G)
+            r = int(n**0.5) or 1
+            c = int(np.ceil(n/r))
+            G2 = nx.grid_2d_graph(r, c)
+            mapping = {coord: idx for idx, coord in enumerate(G2.nodes())}
+            G = nx.relabel_nodes(G2, mapping)
+            self.grid_pos = {mapping[coord]: coord for coord in mapping}
+            return G
+        if t == "ScaleFree":
+            self.grid_pos = None
+            m = max(1, n//20)
+            return nx.barabasi_albert_graph(n, m)
+        if t == "SmallWorld":
+            self.grid_pos = None
+            k = max(2, (n//10) | 1)  # ensure at least 2 and even
+            p = 0.1
+            return nx.watts_strogatz_graph(n, k, p)
+        self.grid_pos = None
         return nx.Graph()
 
     def _orient(self, G):
-        D = nx.DiGraph(); D.add_nodes_from(G.nodes(data=True))
-        for u,v in G.edges():
-            if random.random()<0.5: D.add_edge(u,v)
-            else:                   D.add_edge(v,u)
+        D = nx.DiGraph()
+        D.add_nodes_from(G.nodes(data=True))
+        for u, v in G.edges():
+            if random.random() < 0.5:
+                D.add_edge(u, v)
+            else:
+                D.add_edge(v, u)
         return D
 
     def _assign_weights(self, G):
-        for u,v in G.edges():
+        for u, v in G.edges():
             G[u][v]['weight'] = random.randint(1,20)
 
     def _draw_graph(self, highlight_nodes=None, highlight_edges=None):
         self.ax.clear()
-        pos = nx.spring_layout(self.G, seed=42)
+        if self.grid_pos:
+            pos = self.grid_pos
+        else:
+            pos = nx.spring_layout(self.G, seed=42)
         nx.draw(self.G, pos, ax=self.ax,
                 with_labels=True, node_size=300, node_color='lightblue',
                 edge_color='gray', arrows=self.is_directed.get())
@@ -181,13 +217,16 @@ class GraphExplorerUI(tk.Tk):
         self.fw_done = False
         n = self.node_scale.get()
         self.G0 = self._build_undirected(n)
-        self.G = self.is_directed.get() and self._orient(self.G0) or self.G0.copy()
-        if self.is_weighted.get(): self._assign_weights(self.G)
+        self.G = (self.is_directed.get() and self._orient(self.G0)) or self.G0.copy()
+        if self.is_weighted.get():
+            self._assign_weights(self.G)
         self._draw_graph()
-        self.info.config(text=f"Graph generated with {n} nodes.")
+        self.info.config(text=f"Graph generated.")
 
     def _on_plot_bfs_dfs(self):
+        self.figure.clear(); self.ax = self.figure.add_subplot(111)
         self._stop_animation()
+
         max_n = self.node_scale.get()
         sizes = np.unique(np.linspace(2, max_n, 500, dtype=int))
         bfs_t, dfs_t = [], []
@@ -195,22 +234,22 @@ class GraphExplorerUI(tk.Tk):
             bt, dt = 0.0, 0.0
             for _ in range(10):
                 G0 = self._build_undirected(n)
-                G = self.is_directed.get() and self._orient(G0) or G0
+                G = (self.is_directed.get() and self._orient(G0)) or G0
                 t0 = time.perf_counter(); list(nx.bfs_edges(G, 0)); bt += time.perf_counter() - t0
                 t0 = time.perf_counter(); list(nx.dfs_edges(G, 0)); dt += time.perf_counter() - t0
-            bfs_t.append(bt / 10); dfs_t.append(dt / 10)
-        self.ax.clear()
+            bfs_t.append(bt/10); dfs_t.append(dt/10)
+
         self.ax.plot(sizes, bfs_t, label='BFS', marker='.', linewidth=1)
         self.ax.plot(sizes, dfs_t, label='DFS', marker='.', linewidth=1)
-        self.ax.set_xlabel('Number of Nodes')
-        self.ax.set_ylabel('Average Time (s)')
+        self.ax.set_xlabel('Number of Nodes'); self.ax.set_ylabel('Average Time (s)')
         self.ax.set_title(f'BFS vs DFS (up to {max_n} nodes, avg over 10 runs)')
-        self.ax.legend()
-        self.canvas.draw()
+        self.ax.legend(); self.canvas.draw()
 
     def _on_plot_sp(self):
+        self.figure.clear(); self.ax = self.figure.add_subplot(111)
         self._stop_animation()
         self.fw_done = False
+
         max_n = self.node_scale.get()
         s_ui, e_ui = self.start_scale.get(), self.end_scale.get()
         sizes = np.unique(np.linspace(2, max_n, 100, dtype=int))
@@ -220,24 +259,25 @@ class GraphExplorerUI(tk.Tk):
             for _ in range(10):
                 s, e = min(s_ui, n-1), min(e_ui, n-1)
                 G0 = self._build_undirected(n)
-                G = self.is_directed.get() and self._orient(G0) or G0
-                if self.is_weighted.get(): self._assign_weights(G)
+                G = (self.is_directed.get() and self._orient(G0)) or G0
+                if self.is_weighted.get():
+                    self._assign_weights(G)
                 else:
                     for u,v in G.edges(): G[u][v]['weight'] = 1
                 t0 = time.perf_counter(); nx.dijkstra_path(G, s, e, weight='weight'); sd += time.perf_counter() - t0
                 t0 = time.perf_counter(); nx.floyd_warshall(G, weight='weight'); fd += time.perf_counter() - t0
-            dij_t.append(sd / 10); fw_t.append(fd / 10)
-        self.ax.clear()
+            dij_t.append(sd/10); fw_t.append(fd/10)
+
         self.ax.plot(sizes, dij_t, label='Dijkstra', marker='.', linewidth=1)
         self.ax.plot(sizes, fw_t, label='Floyd–Warshall', marker='.', linewidth=1)
-        self.ax.set_xlabel('Number of Nodes')
-        self.ax.set_ylabel('Average Time (s)')
+        self.ax.set_xlabel('Number of Nodes'); self.ax.set_ylabel('Average Time (s)')
         self.ax.set_title(f'Dijkstra vs Floyd–Warshall (up to {max_n} nodes, avg over 10 runs)')
-        self.ax.legend()
-        self.canvas.draw()
+        self.ax.legend(); self.canvas.draw()
 
     def _on_plot_mst(self):
+        self.figure.clear(); self.ax = self.figure.add_subplot(111)
         self._stop_animation()
+
         max_n = self.node_scale.get()
         sizes = np.unique(np.linspace(2, max_n, 100, dtype=int))
         prim_t, kruskal_t = [], []
@@ -245,22 +285,21 @@ class GraphExplorerUI(tk.Tk):
             pt, kt = 0.0, 0.0
             for _ in range(10):
                 G0 = self._build_undirected(n)
-                if self.is_weighted.get(): self._assign_weights(G0)
+                if self.is_weighted.get():
+                    self._assign_weights(G0)
                 else:
                     for u,v in G0.edges(): G0[u][v]['weight'] = 1
                 t0 = time.perf_counter(); nx.minimum_spanning_tree(G0, algorithm='prim', weight='weight'); pt += time.perf_counter() - t0
                 t0 = time.perf_counter(); nx.minimum_spanning_tree(G0, algorithm='kruskal', weight='weight'); kt += time.perf_counter() - t0
-            prim_t.append(pt / 10); kruskal_t.append(kt / 10)
-        self.ax.clear()
+            prim_t.append(pt/10); kruskal_t.append(kt/10)
+
         self.ax.plot(sizes, prim_t, label="Prim's", marker='.', linewidth=1)
         self.ax.plot(sizes, kruskal_t, label="Kruskal's", marker='.', linewidth=1)
-        self.ax.set_xlabel('Number of Nodes')
-        self.ax.set_ylabel('Average Time (s)')
+        self.ax.set_xlabel('Number of Nodes'); self.ax.set_ylabel('Average Time (s)')
         self.ax.set_title(f"Prim vs Kruskal (up to {max_n} nodes, avg over 10 runs)")
-        self.ax.legend()
-        self.canvas.draw()
+        self.ax.legend(); self.canvas.draw()
 
-    # ─── Record & Animate Steps ────────────────────────────────────────────
+    # ─── Recording steps for animation ────────────────────────────────────
     def _record_bfs(self, s, t):
         visited, parent, q = {s}, {}, [s]
         self.steps = [([], [], f"Start BFS from {s}")]
@@ -280,7 +319,7 @@ class GraphExplorerUI(tk.Tk):
 
     def _record_dfs(self, s, t):
         visited, parent, stack = set(), {}, [s]
-        self.steps = [([], [], f"Start DFS from {s}")] 
+        self.steps = [([], [], f"Start DFS from {s}")]
         while stack:
             u = stack.pop()
             if u not in visited:
@@ -366,29 +405,40 @@ class GraphExplorerUI(tk.Tk):
     # ─── Animation Control ─────────────────────────────────────────────────
     def _start_animation(self):
         if not hasattr(self, 'G'):
-            self.info.config(text="Generate a graph first."); return
+            self.info.config(text="Generate a graph first.")
+            return
         self._stop_animation()
         self.fw_done = False
-        algo = self.algo_var.get()
         s, e = self.start_scale.get(), self.end_scale.get()
-        if algo == "BFS":         self._record_bfs(s, e)
-        elif algo == "DFS":       self._record_dfs(s, e)
+        algo = self.algo_var.get()
+        if algo == "BFS":
+            self._record_bfs(s, e)
+        elif algo == "DFS":
+            self._record_dfs(s, e)
         elif algo == "Dijkstra":
-            if not self.is_weighted.get(): self.info.config(text="Dijkstra requires weighted edges."); return
+            if not self.is_weighted.get():
+                self.info.config(text="Dijkstra requires weighted edges.")
+                return
             self._record_dijkstra(s, e)
         elif algo == "Prim":
-            if not self.is_weighted.get(): self.info.config(text="Prim requires weighted edges."); return
+            if not self.is_weighted.get():
+                self.info.config(text="Prim requires weighted edges.")
+                return
             self._record_prim()
         elif algo == "Kruskal":
-            if not self.is_weighted.get(): self.info.config(text="Kruskal requires weighted edges."); return
+            if not self.is_weighted.get():
+                self.info.config(text="Kruskal requires weighted edges.")
+                return
             self._record_kruskal()
         elif algo == "Floyd–Warshall":
-            if not self.is_weighted.get(): self.info.config(text="Floyd–Warshall requires weighted edges."); return
+            if not self.is_weighted.get():
+                self.info.config(text="Floyd–Warshall requires weighted edges.")
+                return
             self._record_floyd_warshall()
         self.step_index = 0
         self.animating = True
         self.next_step_btn.config(state="normal")
-        self.info.config(text="Animation started. Use → or Next Step.")
+        self.info.config(text="Animation started.")
 
     def _next_step(self):
         if not self.animating:
@@ -411,7 +461,7 @@ class GraphExplorerUI(tk.Tk):
             self.animating = False
             self.next_step_btn.config(state="disabled")
 
-    # ─── Arrow key handling ────────────────────────────────────────────────
+    # ─── Arrow Key Handling ────────────────────────────────────────────────
     def _on_right_press(self, event):
         if not self.animating:
             return
@@ -431,6 +481,7 @@ class GraphExplorerUI(tk.Tk):
             self.after_cancel(self._auto_after_id)
             self._auto_after_id = None
 
+    # ─── Floyd–Warshall Dynamic Highlight ─────────────────────────────────
     def _highlight_fw_path(self):
         i, j = self.start_scale.get(), self.end_scale.get()
         if self.fw_next and self.fw_next[i][j] is not None:
@@ -440,7 +491,7 @@ class GraphExplorerUI(tk.Tk):
                 path.append(i)
             edges = list(zip(path, path[1:]))
             self._draw_graph(highlight_nodes=path, highlight_edges=edges)
-            self.info.config(text="FW dynamic path: " + "→".join(map(str, path)))
+            self.info.config(text="FW dynamic path:\n" + "→".join(map(str, path)))
 
 if __name__ == "__main__":
     app = GraphExplorerUI()

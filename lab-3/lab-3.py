@@ -38,7 +38,7 @@ class GraphExplorerUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Graph Explorer")
-        self.geometry("1100x650")
+        self.geometry("1100x660")
         self.focus_set()
 
         # ─── State ───────────────────────────────────────────────────────────
@@ -73,18 +73,14 @@ class GraphExplorerUI(tk.Tk):
         self.node_scale.pack(fill="x", pady=(0,10))
 
         ttk.Label(ctrl, text="Start node:").pack(anchor="w")
-        self.start_scale = tk.Scale(
-            ctrl, from_=0, to=self.node_scale.get()-1,
-            orient=tk.HORIZONTAL, command=self._on_slider_change
-        )
+        self.start_scale = tk.Scale(ctrl, from_=0, to=self.node_scale.get()-1,
+                                    orient=tk.HORIZONTAL, command=self._on_slider_change)
         self.start_scale.set(0)
         self.start_scale.pack(fill="x", pady=(0,10))
 
         ttk.Label(ctrl, text="End node:").pack(anchor="w")
-        self.end_scale = tk.Scale(
-            ctrl, from_=0, to=self.node_scale.get()-1,
-            orient=tk.HORIZONTAL, command=self._on_slider_change
-        )
+        self.end_scale = tk.Scale(ctrl, from_=0, to=self.node_scale.get()-1,
+                                  orient=tk.HORIZONTAL, command=self._on_slider_change)
         self.end_scale.set(self.node_scale.get()-1)
         self.end_scale.pack(fill="x", pady=(0,20))
 
@@ -218,7 +214,7 @@ class GraphExplorerUI(tk.Tk):
         if self.is_weighted.get():
             self._assign_weights(self.G)
         self._draw_graph()
-        self.info.config(text=f"Graph generated with {n} nodes.")
+        self.info.config(text=f"Graph generated.")
 
     def _on_plot_bfs_dfs(self):
         self.figure.clear()
@@ -256,20 +252,22 @@ class GraphExplorerUI(tk.Tk):
         dij_t, fw_t = [], []
         for n in sizes:
             sd, fd = 0.0, 0.0
+            s, e = min(s_ui, n-1), min(e_ui, n-1)  # precompute start/end
             for _ in range(10):
                 # ensure directed graph has a path
-                while True:
+                if self.is_directed.get():
+                    while True:
+                        G0 = self._build_undirected(n)
+                        G = self._orient(G0)
+                        if nx.has_path(G, s, e):
+                            break
+                else:
                     G0 = self._build_undirected(n)
-                    G = (self.is_directed.get() and self._orient(G0)) or G0
-                    if not self.is_directed.get():
-                        break
-                    s, e = min(s_ui, n-1), min(e_ui, n-1)
-                    if nx.has_path(G, s, e):
-                        break
+                    G = G0
                 if self.is_weighted.get():
                     self._assign_weights(G)
                 else:
-                    for u,v in G.edges():
+                    for u, v in G.edges():
                         G[u][v]['weight'] = 1
                 t0 = time.perf_counter(); nx.dijkstra_path(G, s, e, weight='weight'); sd += time.perf_counter() - t0
                 t0 = time.perf_counter(); nx.floyd_warshall(G, weight='weight'); fd += time.perf_counter() - t0
@@ -297,7 +295,7 @@ class GraphExplorerUI(tk.Tk):
                 if self.is_weighted.get():
                     self._assign_weights(G0)
                 else:
-                    for u,v in G0.edges():
+                    for u, v in G0.edges():
                         G0[u][v]['weight'] = 1
                 t0 = time.perf_counter(); nx.minimum_spanning_tree(G0, algorithm='prim', weight='weight'); pt += time.perf_counter() - t0
                 t0 = time.perf_counter(); nx.minimum_spanning_tree(G0, algorithm='kruskal', weight='weight'); kt += time.perf_counter() - t0
@@ -317,15 +315,20 @@ class GraphExplorerUI(tk.Tk):
         while q:
             u = q.pop(0)
             self.steps.append(([u], [], f"Visit node {u}"))
-            if u == t: break
+            if u == t:
+                break
             for v in self.G[u]:
                 if v not in visited:
-                    visited.add(v); parent[v] = u; q.append(v)
+                    visited.add(v)
+                    parent[v] = u
+                    q.append(v)
                     self.steps.append(([], [(u, v)], f"Queue edge {u}→{v}"))
         path, cur = [], t
         while cur in parent:
-            path.insert(0, cur); cur = parent[cur]
-        if path: path.insert(0, s)
+            path.insert(0, cur)
+            cur = parent[cur]
+        if path:
+            path.insert(0, s)
         self.current_path, self.current_edges = path, []
 
     def _record_dfs(self, s, t):
@@ -336,44 +339,57 @@ class GraphExplorerUI(tk.Tk):
             if u not in visited:
                 visited.add(u)
                 self.steps.append(([u], [], f"Visit node {u}"))
-                if u == t: break
+                if u == t:
+                    break
                 for v in self.G[u]:
                     if v not in visited:
-                        parent[v] = u; stack.append(v)
+                        parent[v] = u
+                        stack.append(v)
                         self.steps.append(([], [(u, v)], f"Push edge {u}→{v}"))
         path, cur = [], t
         while cur in parent:
-            path.insert(0, cur); cur = parent[cur]
-        if path: path.insert(0, s)
+            path.insert(0, cur)
+            cur = parent[cur]
+        if path:
+            path.insert(0, s)
         self.current_path, self.current_edges = path, []
 
     def _record_dijkstra(self, s, t):
         dist, prev = {n: float('inf') for n in self.G}, {}
-        dist[s] = 0; Q = set(self.G.nodes())
+        dist[s] = 0
+        Q = set(self.G.nodes())
         self.steps = [([], [], f"Start Dijkstra from {s} to {t}")]
         while Q:
-            u = min(Q, key=lambda x: dist[x]); Q.remove(u)
+            u = min(Q, key=lambda x: dist[x])
+            Q.remove(u)
             self.steps.append(([u], [], f"Settle node {u} (dist={dist[u]})"))
             for v in self.G[u]:
                 w = self.G[u][v]['weight']
                 if dist[u] + w < dist[v]:
-                    dist[v] = dist[u] + w; prev[v] = u
+                    dist[v] = dist[u] + w
+                    prev[v] = u
                     self.steps.append(([], [(u, v)], f"Relax edge {u}→{v}, new dist={dist[v]}"))
         path, cur = [], t
         while cur in prev:
-            path.insert(0, cur); cur = prev[cur]
-        if path: path.insert(0, s)
+            path.insert(0, cur)
+            cur = prev[cur]
+        if path:
+            path.insert(0, s)
         self.current_path, self.current_edges = path, []
 
     def _record_prim(self):
         self.steps = [([], [], "Start Prim's MST")]
-        visited = {next(iter(self.G.nodes()))}
-        edges = [(self.G[u][v]['weight'], u, v) for u in visited for v in self.G[u]]
-        heapq.heapify(edges); mst = []
+        start = next(iter(self.G.nodes()))
+        visited = {start}
+        edges = [(self.G[start][v]['weight'], start, v) for v in self.G[start]]
+        heapq.heapify(edges)
+        mst = []
         while edges and len(visited) < self.G.number_of_nodes():
             w, u, v = heapq.heappop(edges)
-            if v in visited: continue
-            visited.add(v); mst.append((u, v))
+            if v in visited:
+                continue
+            visited.add(v)
+            mst.append((u, v))
             self.steps.append(([], [(u, v)], f"Add edge {u}–{v} (weight={w})"))
             for x in self.G[v]:
                 if x not in visited:
@@ -383,23 +399,27 @@ class GraphExplorerUI(tk.Tk):
     def _record_kruskal(self):
         self.steps = [([], [], "Start Kruskal's MST")]
         edges = sorted((self.G[u][v]['weight'], u, v) for u, v in self.G.edges())
-        uf = {n: n for n in self.G}; mst = []
+        uf = {n: n for n in self.G}
         def find(u):
-            while uf[u] != u: u = uf[u]
+            while uf[u] != u:
+                u = uf[u]
             return u
-        def union(a, b): uf[find(a)] = find(b)
+        def union(a, b):
+            uf[find(a)] = find(b)
+        mst = []
         for w, u, v in edges:
             if find(u) != find(v):
-                union(u, v); mst.append((u, v))
+                union(u, v)
+                mst.append((u, v))
                 self.steps.append(([], [(u, v)], f"Add edge {u}–{v} (weight={w})"))
         self.current_path, self.current_edges = [], mst
 
     def _record_floyd_warshall(self):
-        dist = {i: {j: (self.G[i][j]['weight'] if self.G.has_edge(i, j) else float('inf'))
-                    for j in self.G} for i in self.G}
+        dist = {i: {j: (self.G[i][j]['weight'] if self.G.has_edge(i, j) else float('inf')) for j in self.G} for i in self.G}
         next_hop = {i: {j: (j if self.G.has_edge(i, j) else None) for j in self.G} for i in self.G}
         for i in self.G:
-            dist[i][i] = 0; next_hop[i][i] = i
+            dist[i][i] = 0
+            next_hop[i][i] = i
         self.steps = [([], [], "Initialize Floyd–Warshall")]
         for k in self.G:
             for i in self.G:
@@ -450,7 +470,7 @@ class GraphExplorerUI(tk.Tk):
         self.step_index = 0
         self.animating = True
         self.next_step_btn.config(state="normal")
-        self.info.config(text="Animation started. Use → or Next Step.")
+        self.info.config(text="Animation started.")
 
     def _next_step(self):
         if not self.animating:
@@ -503,7 +523,7 @@ class GraphExplorerUI(tk.Tk):
                 path.append(i)
             edges = list(zip(path, path[1:]))
             self._draw_graph(highlight_nodes=path, highlight_edges=edges)
-            self.info.config(text="FW dynamic path: " + "→".join(map(str, path)))
+            self.info.config(text="FW dynamic path:\n" + "→".join(map(str, path)))
 
 if __name__ == "__main__":
     app = GraphExplorerUI()

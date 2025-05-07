@@ -358,17 +358,17 @@ class GraphExplorerUI(tk.Tk):
         dist, prev = {n: float('inf') for n in self.G}, {}
         dist[s] = 0
         Q = set(self.G.nodes())
-        self.steps = [([], [], f"Start Dijkstra from {s} to {t}")]
+        self.steps = [([], [], f"Start Dijkstra {s} to {t}")]
         while Q:
             u = min(Q, key=lambda x: dist[x])
             Q.remove(u)
-            self.steps.append(([u], [], f"Settle node {u} (dist={dist[u]})"))
+            self.steps.append(([u], [], f"Settle node {u}\n (dist={dist[u]})"))
             for v in self.G[u]:
                 w = self.G[u][v]['weight']
                 if dist[u] + w < dist[v]:
                     dist[v] = dist[u] + w
                     prev[v] = u
-                    self.steps.append(([], [(u, v)], f"Relax edge {u}→{v}, new dist={dist[v]}"))
+                    self.steps.append(([], [(u, v)], f"Relax edge {u}→{v} \n new dist={dist[v]}"))
         path, cur = [], t
         while cur in prev:
             path.insert(0, cur)
@@ -429,7 +429,7 @@ class GraphExplorerUI(tk.Tk):
                         old = dist[i][j]
                         dist[i][j] = nd
                         next_hop[i][j] = next_hop[i][k]
-                        self.steps.append(([], [(i, j)], f"Update dist[{i},{j}] {old}→{nd}"))
+                        self.steps.append(([], [(i, j)], f"Update dist[{i},{j}] \n{old}→{nd}"))
         self.fw_next = next_hop
         self.fw_done = True
         self.current_path, self.current_edges = [], []
@@ -484,7 +484,7 @@ class GraphExplorerUI(tk.Tk):
             if self.current_path:
                 path_edges = list(zip(self.current_path, self.current_path[1:]))
                 self._draw_graph(highlight_nodes=self.current_path, highlight_edges=path_edges)
-                self.info.config(text="Done: final path highlighted.")
+                self.info.config(text="Done: path highlighted.")
             elif self.current_edges:
                 self._draw_graph(highlight_edges=self.current_edges)
                 self.info.config(text="Done: MST highlighted.")
